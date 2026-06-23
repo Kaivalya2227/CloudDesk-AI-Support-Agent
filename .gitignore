@@ -1,0 +1,26 @@
+# Environment variables / secrets
+.env
+*.env
+
+# Database files (regenerable from create_database.py + generate_data.py)
+*.db
+*.sqlite
+*.sqlite3
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+
+# VS Code
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
