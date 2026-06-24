@@ -239,7 +239,7 @@ def generate_accounts_and_customers(conn):
     """, customers_data)
     conn.commit()
 
-    print(f"✅ Inserted {len(accounts_data)} accounts and {len(customers_data)} customers.")
+    print(f"Inserted {len(accounts_data)} accounts and {len(customers_data)} customers.")
     return account_ids, account_seat_info
 
 
@@ -273,7 +273,7 @@ def generate_subscriptions(conn, account_ids, account_seat_info):
     """, subscriptions_data)
     conn.commit()
 
-    print(f"✅ Inserted {len(subscriptions_data)} subscriptions.")
+    print(f"Inserted {len(subscriptions_data)} subscriptions.")
 
 
 def clear_existing_data(conn):

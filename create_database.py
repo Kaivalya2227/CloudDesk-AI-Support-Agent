@@ -1,6 +1,4 @@
 """
-create_database.py
-
 Creates the CloudDesk SQLite database and all tables from scratch.
 
 Run this with:
@@ -158,7 +156,7 @@ def create_tables(conn):
     """)
 
     conn.commit()
-    print(f"✅ Database '{DB_NAME}' created successfully with all 7 tables.")
+    print(f"Database '{DB_NAME}' created successfully with all 7 tables.")
 
 
 def verify_tables(conn):

@@ -1,6 +1,4 @@
 """
-generate_invoices_tickets.py
-
 Generates realistic synthetic data for: invoices, tickets.
 Run this AFTER create_database.py and generate_data.py:
 
@@ -150,7 +148,7 @@ def generate_invoices(conn, accounts):
         VALUES (?, ?, ?, ?)
     """, invoices_data)
     conn.commit()
-    print(f"✅ Inserted {len(invoices_data)} invoices.")
+    print(f"Inserted {len(invoices_data)} invoices.")
 
 
 def generate_tickets(conn, accounts, customers_by_account):
@@ -218,7 +216,7 @@ def generate_tickets(conn, accounts, customers_by_account):
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, tickets_data)
     conn.commit()
-    print(f"✅ Inserted {len(tickets_data)} tickets.")
+    print(f"Inserted {len(tickets_data)} tickets.")
 
 
 def clear_existing_data(conn):

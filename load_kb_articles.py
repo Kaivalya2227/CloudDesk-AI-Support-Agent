@@ -1,6 +1,4 @@
 """
-load_kb_articles.py
-
 Loads a fixed set of hand-written knowledge base articles into the database.
 Unlike the other generators, this data is NOT randomly generated -- KB articles
 need to read like genuine help-center content, so they're written out directly
@@ -214,7 +212,7 @@ def load_articles(conn):
         VALUES (?, ?, ?)
     """, KB_ARTICLES)
     conn.commit()
-    print(f"✅ Loaded {len(KB_ARTICLES)} knowledge base articles.")
+    print(f"Loaded {len(KB_ARTICLES)} knowledge base articles.")
 
 
 if __name__ == "__main__":

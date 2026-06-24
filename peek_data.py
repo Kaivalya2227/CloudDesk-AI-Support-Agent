@@ -1,6 +1,4 @@
 """
-peek_data.py
-
 A small helper for browsing sample data while testing the agent, so you don't
 have to retype SQL one-liners every time you need a customer email, account_id,
 or ticket_id to test with.
