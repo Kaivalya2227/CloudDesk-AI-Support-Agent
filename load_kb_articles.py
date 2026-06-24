@@ -18,6 +18,18 @@ DB_NAME = "clouddesk.db"
 
 KB_ARTICLES = [
     # --- billing ---
+    ("What's included in each CloudDesk plan tier?",
+     "CloudDesk offers three plan tiers. Starter ($29/month base, plus $5 per additional "
+     "seat) includes core call routing, a single-level IVR menu, and standard reporting -- "
+     "best for small teams up to 10 seats. Growth ($99/month base, plus $12 per additional "
+     "seat) adds skill-based routing, multi-level IVR menus (up to 5 levels), CRM "
+     "integrations, and advanced analytics -- suited to growing teams up to 50 seats. "
+     "Enterprise ($249/month base, plus $25 per additional seat) adds priority queueing for "
+     "VIP customers, custom webhook integrations, dedicated onboarding support, and SLA-backed "
+     "uptime guarantees -- designed for larger teams with complex routing needs. Any plan can "
+     "be upgraded at any time; downgrades take effect at the next renewal date.",
+     "billing"),
+
     ("How is my monthly invoice calculated?",
      "Your invoice is calculated based on your plan tier (Starter, Growth, or Enterprise) "
      "plus a per-seat charge for every active user on your account beyond the first seat. "

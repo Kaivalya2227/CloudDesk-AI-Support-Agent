@@ -1,13 +1,19 @@
 """
+create_database.py
+
 Creates the CloudDesk SQLite database and all tables from scratch.
 
-This creates a file called `clouddesk.db` in the same folder. This file stores all the data.
-Safe to re-run as it drops existing tables first, so you always get a clean schema.
+Run this with:
+    python create_database.py
+
+This will create a file called `clouddesk.db` in the same folder.
+Safe to re-run: it drops existing tables first, so you always get a clean schema.
 """
 
 import sqlite3
 
 DB_NAME = "clouddesk.db"
+
 
 def create_connection():
     """Creates (or opens) the SQLite database file and returns a connection."""
@@ -19,10 +25,11 @@ def create_tables(conn):
     cursor = conn.cursor()
 
     # Drop tables first if they exist, so this script is safely re-runnable
-    # during development. Order matters, drop child tables before parents
+    # during development. Order matters: drop child tables before parents
     # to avoid foreign key issues.
     cursor.executescript("""
         DROP TABLE IF EXISTS agent_logs;
+        DROP TABLE IF EXISTS verification_attempts;
         DROP TABLE IF EXISTS tickets;
         DROP TABLE IF EXISTS invoices;
         DROP TABLE IF EXISTS subscriptions;
@@ -118,6 +125,20 @@ def create_tables(conn):
         );
     """)
 
+    # --- verification_attempts -------------------------------------------
+    # Tracks failed identity verification attempts, keyed by the email being
+    # attempted (not the account) -- this is what enables throttling a
+    # specific verification session without ever touching the real account
+    # record. See guardrails.py for the throttling logic that uses this.
+    cursor.execute("""
+        CREATE TABLE verification_attempts (
+            attempt_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+            email_attempted TEXT NOT NULL,
+            attempted_at    TEXT NOT NULL,
+            succeeded       INTEGER NOT NULL CHECK (succeeded IN (0, 1))
+        );
+    """)
+
     # --- agent_logs -------------------------------------------------------
     # Every interaction the agent has gets logged here. This is the backbone
     # of the evaluation harness we'll build in week 2.
@@ -141,7 +162,7 @@ def create_tables(conn):
 
 
 def verify_tables(conn):
-    """Prints out the list of tables that now exist, as a verification."""
+    """Prints out the list of tables that now exist, as a sanity check."""
     cursor = conn.cursor()
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
     tables = cursor.fetchall()
