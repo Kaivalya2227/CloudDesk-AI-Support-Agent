@@ -87,37 +87,80 @@ def get_billing_details(account_id: int) -> dict:
     return {"found": True, "billing": dict(row)}
 
 
-def search_knowledge_base(query: str, category: str = None) -> dict:
+def list_recent_invoices(account_id: int, limit: int = 5) -> dict:
     """
-    Searches knowledge base articles by keyword (simple LIKE match on title/content),
-    optionally filtered by category. This is intentionally simple keyword search
-    rather than embeddings-based retrieval -- sufficient for a ~25-article KB,
-    with semantic/embedding search as a noted future upgrade.
+    Returns the most recent invoices for an account (date, amount, status).
+    Use this to investigate billing questions that need to look at actual
+    charge history -- e.g., checking for duplicate charges, failed payments,
+    or confirming whether a specific invoice was paid -- rather than just the
+    current plan/MRR summary from get_billing_details.
     """
     conn = get_connection()
     cursor = conn.cursor()
-
-    like_pattern = f"%{query}%"
-    if category:
-        cursor.execute("""
-            SELECT article_id, title, content, category FROM knowledge_base_articles
-            WHERE (title LIKE ? OR content LIKE ?) AND category = ?
-            LIMIT 3
-        """, (like_pattern, like_pattern, category))
-    else:
-        cursor.execute("""
-            SELECT article_id, title, content, category FROM knowledge_base_articles
-            WHERE title LIKE ? OR content LIKE ?
-            LIMIT 3
-        """, (like_pattern, like_pattern))
-
+    cursor.execute("""
+        SELECT invoice_id, account_id, amount, date, status
+        FROM invoices
+        WHERE account_id = ?
+        ORDER BY date DESC
+        LIMIT ?
+    """, (account_id, limit))
     rows = cursor.fetchall()
     conn.close()
 
     if not rows:
+        return {"found": False, "message": f"No invoices found for account {account_id}."}
+
+    return {"found": True, "invoices": [dict(row) for row in rows]}
+
+
+def search_knowledge_base(query: str, category: str = None) -> dict:
+    """
+    Searches knowledge base articles by keyword. Matches if ANY significant word
+    from the query appears in the title or content, ranked by how many words
+    matched -- a step up from requiring the full query phrase as one exact
+    substring, while still being simple keyword matching rather than true
+    embeddings-based semantic search (a noted future upgrade).
+    """
+    # Strip common stopwords so they don't dilute matching ("how", "do", "i", "my", etc.)
+    stopwords = {
+        "a", "an", "the", "is", "are", "do", "does", "i", "my", "me", "to", "for",
+        "of", "on", "in", "and", "or", "how", "what", "can", "could", "would",
+        "please", "with", "about", "there", "way", "ways",
+    }
+    words = [w.strip(".,?!").lower() for w in query.split()]
+    keywords = [w for w in words if w and w not in stopwords]
+
+    if not keywords:
+        keywords = words  # fall back to original words if everything got stripped
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    if category:
+        cursor.execute("""
+            SELECT article_id, title, content, category FROM knowledge_base_articles
+            WHERE category = ?
+        """, (category,))
+    else:
+        cursor.execute("SELECT article_id, title, content, category FROM knowledge_base_articles")
+
+    candidates = cursor.fetchall()
+    conn.close()
+
+    scored = []
+    for row in candidates:
+        haystack = (row["title"] + " " + row["content"]).lower()
+        score = sum(1 for kw in keywords if kw in haystack)
+        if score > 0:
+            scored.append((score, dict(row)))
+
+    if not scored:
         return {"found": False, "message": "No matching knowledge base articles found."}
 
-    return {"found": True, "articles": [dict(row) for row in rows]}
+    scored.sort(key=lambda pair: pair[0], reverse=True)
+    top_articles = [article for _, article in scored[:3]]
+
+    return {"found": True, "articles": top_articles}
 
 
 def check_ticket_status(ticket_id: int) -> dict:
@@ -233,6 +276,26 @@ TOOL_SCHEMAS = [
         },
     },
     {
+        "name": "list_recent_invoices",
+        "description": (
+            "Get the most recent invoices for an account (date, amount, status). Use this "
+            "when a customer asks about a specific charge, a possible duplicate charge (a "
+            "duplicate charge typically means two invoices within 1-2 days of each other " 
+            "and for similar amounts, check specifically for that pattern before concluding " 
+            "there's no duplicate), a failed payment, or wants to see their recent billing "
+            "history -- this shows actual invoice-level detail, unlike get_billing_details "
+            "which only shows the current plan summary."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "account_id": {"type": "integer"},
+                "limit": {"type": "integer", "description": "How many recent invoices to return (default 5)."},
+            },
+            "required": ["account_id"],
+        },
+    },
+    {
         "name": "search_knowledge_base",
         "description": (
             "Search the knowledge base for help articles relevant to a customer's question. "
@@ -291,6 +354,7 @@ TOOL_FUNCTIONS = {
     "lookup_customer": lookup_customer,
     "get_account_status": get_account_status,
     "get_billing_details": get_billing_details,
+    "list_recent_invoices": list_recent_invoices,
     "search_knowledge_base": search_knowledge_base,
     "check_ticket_status": check_ticket_status,
     "create_ticket": create_ticket,

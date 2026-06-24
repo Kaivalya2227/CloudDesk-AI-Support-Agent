@@ -1,6 +1,4 @@
 """
-agent.py
-
 The core agent loop: sends the customer's message to Claude along with the
 available tools (from tools.py). If Claude wants to call a tool, this code
 executes the actual Python function and feeds the result back to Claude.
@@ -23,6 +21,7 @@ from guardrails import (
     ThrottledError,
     filter_billing_fields,
     billing_access_blocked,
+    invoice_access_allowed,
     requires_human_confirmation,
 )
 
@@ -65,10 +64,25 @@ General behavior:
 - Answer ONLY what the customer specifically asked. If they ask about account status,
   give the status -- do not also pull and share billing/plan/MRR details unless they
   asked about those too. Use the narrowest tool that answers the actual question.
+- If a question is about a specific charge, possible duplicate billing, or a failed
+  payment, use list_recent_invoices to look at actual invoice history -- get_billing_details
+  only shows the current plan summary, not individual charges. When checking for a
+  DUPLICATE charge specifically: look for two invoices within 1-2 days of each other for
+  similar amounts -- that's the actual signature of a duplicate. Invoices on different
+  dates with different amounts (e.g., normal monthly billing with seat-count changes) are
+  NOT evidence of a duplicate, don't ask the customer to clarify further in that case,
+  just explain clearly that the invoice history doesn't show a duplicate pattern.
+- If a customer asks about plan tiers, pricing, or upgrading/downgrading, ALWAYS search
+  the knowledge base first (try a query like "plan tier" or "pricing") -- there is a
+  knowledge base article with exact pricing and features for every tier. Use it to give
+  a real answer with real numbers before asking the customer anything or offering a ticket.
 - Always search the knowledge base before creating a ticket, in case a documented answer
   already exists.
 - If you cannot resolve the customer's issue using the tools available, create a ticket
-  with a clear summary so a human can follow up.
+  with a clear summary so a human can follow up. Carry forward specific details you've
+  already gathered (e.g., the proposed new plan tier and its cost, or the specific invoice
+  in question) into the ticket summary, so the human reviewing it has full context and
+  doesn't have to re-ask the customer.
 - For anything involving cancellations, refunds, downgrades, ownership transfers, or role
   changes: you cannot perform these actions directly (no such tool exists). First search the
   knowledge base and share any relevant information you find (e.g., what plan options exist,
@@ -121,13 +135,15 @@ def run_agent_turn(conversation_history: list, system_prompt: str, customer_role
                 if function_to_call is None:
                     result = {"error": f"Unknown tool '{tool_name}'"}
                 else:
+                    BILLING_SENSITIVE_TOOLS = {"get_billing_details", "list_recent_invoices"}
                     try:
                         result = function_to_call(**tool_input)
 
-                        # Billing details are restricted entirely for locked/suspended
-                        # accounts, regardless of role -- checked BEFORE role filtering,
-                        # since this blocks access outright rather than just hiding fields.
-                        if tool_name == "get_billing_details" and result.get("found"):
+                        # Billing-sensitive tools (current plan AND invoice history)
+                        # are restricted entirely for locked/suspended accounts,
+                        # regardless of role -- checked BEFORE role filtering, since
+                        # this blocks access outright rather than just hiding fields.
+                        if tool_name in BILLING_SENSITIVE_TOOLS and result.get("found"):
                             status_check = get_account_status(tool_input.get("account_id"))
                             current_status = status_check.get("account", {}).get("status")
 
@@ -141,8 +157,20 @@ def run_agent_turn(conversation_history: list, system_prompt: str, customer_role
                                         f"will be restored once the account is active again."
                                     ),
                                 }
-                            else:
+                            elif tool_name == "get_billing_details":
                                 result["billing"] = filter_billing_fields(result["billing"], customer_role)
+                            elif tool_name == "list_recent_invoices" and not invoice_access_allowed(customer_role):
+                                # Invoices are itemized financial records -- unlike the MRR
+                                # field filter, there's no partial view that makes sense, so
+                                # 'member' role is blocked from this tool entirely.
+                                result = {
+                                    "found": False,
+                                    "message": (
+                                        f"Itemized invoice history is restricted for your role "
+                                        f"({customer_role}). Please ask an account owner or admin "
+                                        f"to review specific invoices or charges."
+                                    ),
+                                }
                     except Exception as e:
                         result = {"error": str(e)}
 
