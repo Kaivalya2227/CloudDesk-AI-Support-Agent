@@ -1,6 +1,4 @@
 """
-seed_eval_fixtures.py
-
 Inserts a small number of DELIBERATE data anomalies needed to test specific
 guardrail/reasoning behaviors that don't occur naturally in the randomly
 generated dataset -- e.g., the synthetic data generator produces invoices on
