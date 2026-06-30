@@ -1,6 +1,4 @@
 """
-tools.py
-
 Defines the tools (Python functions) the AI agent can call, plus the
 "tool schemas" that describe them to the Claude API so the model knows
 they exist and what arguments each one takes.
@@ -15,9 +13,12 @@ drafted as a proposed ticket/action requiring human confirmation.
 
 import sqlite3
 import json
+import os
 
-DB_NAME = "clouddesk.db"
-
+# Allows tests to point this at a temporary, isolated database instead of the
+# real one, via the CLOUDDESK_DB_PATH environment variable. Production
+# behavior is unchanged, defaults to the real clouddesk.db when unset.
+DB_NAME = os.environ.get("CLOUDDESK_DB_PATH", "clouddesk.db")
 
 def get_connection():
     conn = sqlite3.connect(DB_NAME)
@@ -279,12 +280,10 @@ TOOL_SCHEMAS = [
         "name": "list_recent_invoices",
         "description": (
             "Get the most recent invoices for an account (date, amount, status). Use this "
-            "when a customer asks about a specific charge, a possible duplicate charge (a "
-            "duplicate charge typically means two invoices within 1-2 days of each other " 
-            "and for similar amounts, check specifically for that pattern before concluding " 
-            "there's no duplicate), a failed payment, or wants to see their recent billing "
-            "history -- this shows actual invoice-level detail, unlike get_billing_details "
-            "which only shows the current plan summary."
+            "when a customer asks about a specific charge, a possible duplicate charge, a "
+            "failed payment, or wants to see their recent billing history -- this shows "
+            "actual invoice-level detail, unlike get_billing_details which only shows the "
+            "current plan summary."
         ),
         "input_schema": {
             "type": "object",

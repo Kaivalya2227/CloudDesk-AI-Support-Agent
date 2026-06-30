@@ -1,6 +1,4 @@
 """
-guardrails.py
-
 Safety and access-control logic that sits BETWEEN the user and the agent's
 tools. This is deliberately implemented in plain Python, not as instructions
 to the LLM -- verification and role-based filtering must hold even if the
@@ -14,9 +12,11 @@ Two things live here:
 """
 
 import sqlite3
-from datetime import datetime, timedelta
+import os
+from datetime import datetime, timedelta, timezone
 
-DB_NAME = "clouddesk.db"
+# Same env-var override pattern as tools.py, for test isolation.
+DB_NAME = os.environ.get("CLOUDDESK_DB_PATH", "clouddesk.db")
 
 
 def get_connection():
@@ -83,9 +83,19 @@ def is_throttled(email: str) -> tuple:
     if len(recent_failures) < MAX_ATTEMPTS:
         return False, 0
 
-    # Check if the most recent failure run is still within the throttle window
+    # Check if the most recent failure run is still within the throttle window.
+    # NOTE: SQLite's datetime('now') returns UTC, so we must compare against
+    # the current UTC time here too -- comparing against local time (e.g.
+    # datetime.now()) caused a real bug: on machines where local time is far
+    # from UTC (e.g. AEST, UTC+10/11), stored timestamps always looked many
+    # hours in the past relative to local "now", making elapsed time always
+    # exceed the throttle window, so throttling silently never triggered.
+    # Found via a unit test failing on a non-UTC machine while passing in a
+    # UTC-based environment -- a good example of why timezone handling needs
+    # explicit tests, not just "it worked when I tried it."
     most_recent_failure = datetime.strptime(recent_failures[0], "%Y-%m-%d %H:%M:%S")
-    elapsed = datetime.now() - most_recent_failure
+    now_utc = datetime.now(timezone.utc).replace(tzinfo=None)  # naive UTC, to match the naive stored timestamp
+    elapsed = now_utc - most_recent_failure
     window = timedelta(minutes=THROTTLE_WINDOW_MINUTES)
 
     if elapsed < window:
@@ -207,8 +217,16 @@ def billing_access_blocked(account_status: str) -> bool:
 
 DESTRUCTIVE_ACTION_KEYWORDS = [
     "cancel", "cancellation", "refund", "delete account", "downgrade",
-    "transfer ownership", "change role", "remove seat",
+    "transfer ownership", "change role",
 ]
+
+# Seat removal needs word-presence matching rather than an exact phrase --
+# "remove a seat", "removing a seat", "remove one seat" are all natural
+# phrasings that a fixed substring like "remove seat" misses. Found via a
+# unit test catching exactly this brittleness (the same category of bug
+# found earlier in search_knowledge_base's keyword matching).
+SEAT_REMOVAL_WORDS = {"remove", "removing", "delete", "deleting"}
+SEAT_WORDS = {"seat", "seats"}
 
 
 def requires_human_confirmation(user_message: str) -> bool:
@@ -222,4 +240,14 @@ def requires_human_confirmation(user_message: str) -> bool:
     appropriately in conversation.
     """
     lowered = user_message.lower()
-    return any(keyword in lowered for keyword in DESTRUCTIVE_ACTION_KEYWORDS)
+    words = set(lowered.replace(",", " ").replace(".", " ").split())
+
+    if any(keyword in lowered for keyword in DESTRUCTIVE_ACTION_KEYWORDS):
+        return True
+
+    # Seat removal: match if a removal word AND a seat word both appear,
+    # regardless of exact phrasing/word order ("remove a seat", "removing one seat").
+    if words & SEAT_REMOVAL_WORDS and words & SEAT_WORDS:
+        return True
+
+    return False
