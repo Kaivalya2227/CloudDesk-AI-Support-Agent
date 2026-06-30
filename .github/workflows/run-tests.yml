@@ -1,0 +1,41 @@
+name: Run Tests
+
+# "on" defines triggers -- the GitHub Actions equivalent of a Jenkins webhook
+# trigger. This runs on every push to main, and on every pull request
+# targeting main, so you get a pass/fail signal both when you commit directly
+# and when reviewing a PR before merging.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    # GitHub-hosted runner -- a fresh, temporary Ubuntu VM spun up just for
+    # this run, with nothing pre-installed beyond the base OS. This is the
+    # "clean environment" guarantee: if tests pass here, they pass somewhere
+    # that isn't just your own machine.
+    runs-on: ubuntu-latest
+
+    steps:
+      # Each "step" is roughly equivalent to a stage in a Jenkinsfile.
+
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pytest anthropic python-dotenv
+
+      - name: Set up test database schema
+        run: python create_database.py
+
+      - name: Run unit tests
+        run: python -m pytest tests/ -v
